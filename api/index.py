@@ -1,4 +1,4 @@
-from mangum import Asgi
+from mangum import Mangum
 from main import app
 
-asgi = Asgi(app)
+handler = Mangum(app, lifespan="off")
