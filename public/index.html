@@ -507,7 +507,8 @@
             file_a: null,
             file_b: null,
             columns_a: [],
-            columns_b: []
+            columns_b: [],
+            excel_base64: null
         };
 
         // File upload handlers
@@ -671,8 +672,9 @@
                 const result = await response.json();
 
                 if (result.status === 'success') {
+                    currentData.excel_base64 = result.excel_base64;
                     displayResults(result);
-                    showAlert('Conciliación completada exitosamente', 'success');
+                    showAlert('Conciliación completada exitosamente - Revisa los datos antes de descargar', 'success');
                     document.getElementById('results-section').classList.add('active');
                 } else {
                     throw new Error(result.error || 'Error desconocido');
@@ -752,34 +754,34 @@
         }
 
         async function downloadExcel() {
-            const keyCols = Array.from(document.querySelectorAll('.key-col-checkbox:checked')).map(cb => cb.value);
-            const compareCols = Array.from(document.querySelectorAll('.compare-col-checkbox:checked')).map(cb => cb.value);
-
-            const formData = new FormData();
-            formData.append('file_a', currentData.file_a);
-            formData.append('file_b', currentData.file_b);
-            formData.append('key_cols', JSON.stringify(keyCols));
-            formData.append('compare_cols', JSON.stringify(compareCols));
+            if (!currentData.excel_base64) {
+                showAlert('Error: No hay datos para descargar', 'error');
+                return;
+            }
 
             try {
-                const response = await fetch(`${API_BASE}/api/export-excel`, {
-                    method: 'POST',
-                    body: formData
+                // Convert base64 to blob
+                const byteCharacters = atob(currentData.excel_base64);
+                const byteNumbers = new Array(byteCharacters.length);
+                for (let i = 0; i < byteCharacters.length; i++) {
+                    byteNumbers[i] = byteCharacters.charCodeAt(i);
+                }
+                const byteArray = new Uint8Array(byteNumbers);
+                const blob = new Blob([byteArray], { 
+                    type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' 
                 });
 
-                if (response.ok) {
-                    const blob = await response.blob();
-                    const url = window.URL.createObjectURL(blob);
-                    const a = document.createElement('a');
-                    a.href = url;
-                    a.download = 'conciliacion_resultado.xlsx';
-                    a.click();
-                    window.URL.revokeObjectURL(url);
-                } else {
-                    showAlert('Error descargando archivo', 'error');
-                }
+                // Create download link
+                const url = window.URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = 'conciliacion_resultado.xlsx';
+                a.click();
+                window.URL.revokeObjectURL(url);
+                
+                showAlert('Archivo descargado exitosamente', 'success');
             } catch (error) {
-                showAlert('Error: ' + error.message, 'error');
+                showAlert('Error descargando archivo: ' + error.message, 'error');
             }
         }
 
@@ -794,7 +796,8 @@
                 file_a: null,
                 file_b: null,
                 columns_a: [],
-                columns_b: []
+                columns_b: [],
+                excel_base64: null
             };
         }
 

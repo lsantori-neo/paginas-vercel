@@ -1,9 +1,10 @@
 from fastapi import FastAPI, UploadFile, File, Form
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse, JSONResponse
+from fastapi.responses import JSONResponse
 import pandas as pd
 import io
 import json
+import base64
 from typing import List
 
 app = FastAPI()
@@ -76,7 +77,6 @@ async def reconcile(
         diferencias_detalle = []
         
         if compare_cols:
-            missing_compare_in_b = [col for col in compare_cols if col not in df_b.columns]
             compare_cols_valid = [col for col in compare_cols if col in df_b.columns]
             
             if compare_cols_valid:
@@ -109,7 +109,7 @@ async def reconcile(
         solo_a_clean = solo_a.drop(columns=['_merge'], errors='ignore')
         solo_b_clean = solo_b.drop(columns=['_merge'], errors='ignore')
         
-        # Generate Excel file for download
+        # Generate Excel file and encode to base64
         output = io.BytesIO()
         with pd.ExcelWriter(output, engine='openpyxl') as writer:
             df_a.to_excel(writer, index=False, sheet_name='Tabla A Original')
@@ -121,7 +121,7 @@ async def reconcile(
                 diferencias.to_excel(writer, index=False, sheet_name='Diferencias')
         
         output.seek(0)
-        excel_data = output.getvalue()
+        excel_data = base64.b64encode(output.getvalue()).decode('utf-8')
         
         # Prepare response
         return {
@@ -138,7 +138,7 @@ async def reconcile(
                 "solo_b": solo_b_clean.head(10).to_dict(orient='records'),
                 "diferencias": diferencias.head(10).to_dict(orient='records')
             },
-            "excel_download": True
+            "excel_base64": excel_data
         }
     
     except Exception as e:
@@ -146,51 +146,3 @@ async def reconcile(
             status_code=500,
             content={"error": f"Error en procesamiento: {str(e)}"}
         )
-
-@app.post("/api/export-excel")
-async def export_excel(
-    file_a: UploadFile = File(...),
-    file_b: UploadFile = File(...),
-    key_cols: str = Form(...),
-    compare_cols: str = Form(...)
-):
-    """Export full result as Excel file"""
-    try:
-        key_cols = json.loads(key_cols)
-        compare_cols = json.loads(compare_cols)
-        
-        file_a_content = await file_a.read()
-        file_b_content = await file_b.read()
-        
-        if file_a.filename.endswith('.xlsx'):
-            df_a = pd.read_excel(io.BytesIO(file_a_content))
-        else:
-            df_a = pd.read_csv(io.BytesIO(file_a_content))
-        
-        if file_b.filename.endswith('.xlsx'):
-            df_b = pd.read_excel(io.BytesIO(file_b_content))
-        else:
-            df_b = pd.read_csv(io.BytesIO(file_b_content))
-        
-        df_merge = pd.merge(df_a, df_b, on=key_cols, how='outer', suffixes=('_A', '_B'), indicator=True)
-        
-        coincidencias = df_merge[df_merge['_merge'] == 'both'].drop(columns=['_merge'], errors='ignore')
-        solo_a = df_merge[df_merge['_merge'] == 'left_only'].drop(columns=['_merge'], errors='ignore')
-        solo_b = df_merge[df_merge['_merge'] == 'right_only'].drop(columns=['_merge'], errors='ignore')
-        
-        output = io.BytesIO()
-        with pd.ExcelWriter(output, engine='openpyxl') as writer:
-            df_a.to_excel(writer, index=False, sheet_name='Tabla A Original')
-            df_b.to_excel(writer, index=False, sheet_name='Tabla B Original')
-            coincidencias.to_excel(writer, index=False, sheet_name='Coincidencias')
-            solo_a.to_excel(writer, index=False, sheet_name='Solo en A')
-            solo_b.to_excel(writer, index=False, sheet_name='Solo en B')
-        
-        output.seek(0)
-        return FileResponse(
-            io.BytesIO(output.getvalue()),
-            media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-            filename="conciliacion_resultado.xlsx"
-        )
-    except Exception as e:
-        return JSONResponse(status_code=500, content={"error": str(e)})
