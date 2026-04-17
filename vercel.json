@@ -1,0 +1,21 @@
+{
+  "buildCommand": "pip install -r requirements.txt",
+  "functions": {
+    "api/main.py": {
+      "runtime": "python3.11"
+    }
+  },
+  "env": {
+    "PYTHONUNBUFFERED": "1"
+  },
+  "routes": [
+    {
+      "src": "/api/(.*)",
+      "dest": "api/main.py"
+    },
+    {
+      "src": "/(.*)",
+      "dest": "public/index.html"
+    }
+  ]
+}
