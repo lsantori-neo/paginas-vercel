@@ -5,6 +5,7 @@ import pandas as pd
 import io
 import json
 import base64
+import numpy as np
 from typing import List
 
 app = FastAPI()
@@ -17,6 +18,22 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+def convert_to_serializable(obj):
+    """Convert non-JSON serializable types to JSON-compatible types"""
+    if isinstance(obj, dict):
+        return {k: convert_to_serializable(v) for k, v in obj.items()}
+    elif isinstance(obj, list):
+        return [convert_to_serializable(item) for item in obj]
+    elif pd.isna(obj):
+        return None
+    elif isinstance(obj, (np.integer, np.floating)):
+        return obj.item()
+    elif isinstance(obj, np.ndarray):
+        return obj.tolist()
+    elif isinstance(obj, pd.Timestamp):
+        return obj.isoformat()
+    return obj
 
 @app.post("/api/reconcile")
 async def reconcile(
@@ -123,6 +140,12 @@ async def reconcile(
         output.seek(0)
         excel_data = base64.b64encode(output.getvalue()).decode('utf-8')
         
+        # Convert data to JSON-serializable format
+        coincidencias_data = convert_to_serializable(coincidencias_clean.head(10).to_dict(orient='records'))
+        solo_a_data = convert_to_serializable(solo_a_clean.head(10).to_dict(orient='records'))
+        solo_b_data = convert_to_serializable(solo_b_clean.head(10).to_dict(orient='records'))
+        diferencias_data = convert_to_serializable(diferencias.head(10).to_dict(orient='records'))
+        
         # Prepare response
         return {
             "status": "success",
@@ -133,16 +156,19 @@ async def reconcile(
                 "diferencias": int(len(diferencias))
             },
             "data": {
-                "coincidencias": coincidencias_clean.head(10).to_dict(orient='records'),
-                "solo_a": solo_a_clean.head(10).to_dict(orient='records'),
-                "solo_b": solo_b_clean.head(10).to_dict(orient='records'),
-                "diferencias": diferencias.head(10).to_dict(orient='records')
+                "coincidencias": coincidencias_data,
+                "solo_a": solo_a_data,
+                "solo_b": solo_b_data,
+                "diferencias": diferencias_data
             },
             "excel_base64": excel_data
         }
     
     except Exception as e:
+        import traceback
+        error_msg = f"Error en procesamiento: {str(e)}\n{traceback.format_exc()}"
+        print(error_msg)
         return JSONResponse(
             status_code=500,
-            content={"error": f"Error en procesamiento: {str(e)}"}
+            content={"error": error_msg}
         )
