@@ -1,3 +1,4 @@
+from mangum import Asgi
 from main import app
 
-__all__ = ['app']
+asgi = Asgi(app)
