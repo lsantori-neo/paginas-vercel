@@ -17,10 +17,6 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-@app.get("/")
-def read_root():
-    return {"message": "Conciliador API - Vercel Deployment", "status": "active"}
-
 @app.post("/api/reconcile")
 async def reconcile(
     file_a: UploadFile = File(...),

@@ -1,7 +1,7 @@
 {
   "buildCommand": "pip install -r requirements.txt",
   "functions": {
-    "api/main.py": {
+    "api/index.py": {
       "runtime": "python3.11"
     }
   },
@@ -11,7 +11,11 @@
   "routes": [
     {
       "src": "/api/(.*)",
-      "dest": "api/main.py"
+      "dest": "api/index.py"
+    },
+    {
+      "src": "/(.*\\.(?:js|css|png|jpg|jpeg|gif|svg|ico|woff|woff2|ttf|eot))",
+      "dest": "/public/$1"
     },
     {
       "src": "/(.*)",
