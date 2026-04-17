@@ -25,15 +25,20 @@ def convert_to_serializable(obj):
         return {k: convert_to_serializable(v) for k, v in obj.items()}
     elif isinstance(obj, list):
         return [convert_to_serializable(item) for item in obj]
-    elif pd.isna(obj):
+    elif isinstance(obj, float) and np.isnan(obj):
         return None
     elif isinstance(obj, (np.integer, np.floating)):
-        return obj.item()
+        return float(obj) if isinstance(obj, np.floating) else int(obj)
     elif isinstance(obj, np.ndarray):
         return obj.tolist()
     elif isinstance(obj, pd.Timestamp):
         return obj.isoformat()
-    return obj
+    elif pd.isna(obj):
+        return None
+    elif isinstance(obj, (int, float, str, bool, type(None))):
+        return obj
+    else:
+        return str(obj)
 
 @app.post("/api/reconcile")
 async def reconcile(
@@ -100,22 +105,26 @@ async def reconcile(
                 for idx, row in coincidencias.iterrows():
                     diff_cols = []
                     for col in compare_cols_valid:
-                        val_a = row.get(f"{col}_A")
-                        val_b = row.get(f"{col}_B")
-                        
-                        if pd.isna(val_a) and pd.isna(val_b):
+                        try:
+                            val_a = row[f"{col}_A"] if f"{col}_A" in row.index else None
+                            val_b = row[f"{col}_B"] if f"{col}_B" in row.index else None
+
+                            if pd.isna(val_a) and pd.isna(val_b):
+                                continue
+                            elif pd.isna(val_a) or pd.isna(val_b):
+                                diff_cols.append(col)
+                            elif str(val_a).strip() != str(val_b).strip():
+                                diff_cols.append(col)
+                        except Exception as col_error:
+                            print(f"Error comparing column {col}: {col_error}")
                             continue
-                        elif pd.isna(val_a) or pd.isna(val_b):
-                            diff_cols.append(col)
-                        elif str(val_a).strip() != str(val_b).strip():
-                            diff_cols.append(col)
-                    
+
                     if diff_cols:
-                        row_data = {col: row[col] for col in key_cols}
+                        row_data = {col: row[col] for col in key_cols if col in row.index}
                         row_data['Columnas_con_diferencias'] = ', '.join(diff_cols)
                         for col in diff_cols:
-                            row_data[f"{col}_A"] = row.get(f"{col}_A")
-                            row_data[f"{col}_B"] = row.get(f"{col}_B")
+                            row_data[f"{col}_A"] = row[f"{col}_A"] if f"{col}_A" in row.index else None
+                            row_data[f"{col}_B"] = row[f"{col}_B"] if f"{col}_B" in row.index else None
                         diferencias_detalle.append(row_data)
                 
                 if diferencias_detalle:
